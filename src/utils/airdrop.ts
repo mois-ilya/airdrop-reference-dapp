@@ -1,9 +1,31 @@
-export interface UserClaim {
-    claim_message: InternalMessage;
-    /** @example "597968399" */
-    jetton_amount: string;
-    /** @example "kQABcHP_oXkYNCx3HHKd4rxL371RRl-O6IwgwqYZ7IT6Ha-u" */
+export interface VestingParameters {
+    // Will be defined later if needed
+}
+
+export interface UserClaimInfo {
+    /** Jetton master contract in user-friendly form
+     * @example "kQABcHP_oXkYNCx3HHKd4rxL371RRl-O6IwgwqYZ7IT6Ha-u" 
+     */
     jetton: string;
+    /** Jetton amount available for claim now
+     * @example "597968399" 
+     */
+    available_jetton_amount: string;
+    /** Total Jetton amount for airdrop
+     * @example "597968399" 
+     */
+    total_jetton_amount: string;
+    /** Already claimed Jetton amount
+     * @example "597968399" 
+     */
+    claimed_jetton_amount: string;
+    /** Optional vesting parameters if applicable */
+    vesting_parameters?: VestingParameters;
+}
+
+export interface UserClaim extends UserClaimInfo {
+    /** Message to be sent to claim tokens */
+    claim_message: InternalMessage;
 }
 
 export interface InternalMessage {
@@ -29,6 +51,11 @@ export interface InternalMessage {
     amount: string;
 }
 
+/**
+ * Creates a transaction object from a UserClaim
+ * @param userClaim - The claim data containing message details
+ * @returns A transaction object with a 5-minute validity period
+ */
 export const getTxFromUserClaim = (userClaim: UserClaim) => ({
     validUntil: Math.floor(Date.now() / 1000) + 300, // 5 minutes
     messages: [
@@ -40,22 +67,17 @@ export const getTxFromUserClaim = (userClaim: UserClaim) => ({
         },
     ],
 });
-// Mapping object to convert numeric error codes to string identifiers
-const errorCodeMapping: Record<number, string> = {
-    1: 'not_processed',
-    2: 'locked',
-    3: 'already_claimed',
-    4: 'blockchain_overload',
-};
 
-// Interfaces for the response
+// Response interfaces
 export interface AirdropClaimSuccess {
     success: true;
+    info: UserClaimInfo;
     claim: UserClaim;
 }
 
 export interface AirdropClaimError {
     success: false;
+    info?: UserClaimInfo;
     error: {
         code: string;
         message: string;
@@ -64,65 +86,74 @@ export interface AirdropClaimError {
 
 export type AirdropClaimResponse = AirdropClaimSuccess | AirdropClaimError;
 
-/**
- * Handles HTTP errors (e.g., 400, 404, 500) by mapping them to generic,
- * user-friendly error messages so that no sensitive network information is leaked.
- *
- * @param response - The original fetch Response object.
- * @param data - Parsed JSON data from the response body.
- * @returns An AirdropClaimError with a generic error code and message.
- */
-const handleHttpError = (
-    response: Response,
-    data: { code?: number | string; message?: string }
-): AirdropClaimError => {
-    let code: string;
-    let message: string;
+// Mapping of HTTP status codes to error identifiers
+const statusCodeMapping: Record<number, string> = {
+    404: 'not_found',
+    425: 'too_early',
+    409: 'already_claimed',
+    423: 'locked',
+    429: 'blockchain_overload'
+};
 
-    if (response.status === 400) {
-        code = 'bad_request';
-        message = data?.message || 'Invalid Airdrop ID or recipient address.';
-    } else if (response.status === 404) {
-        code = 'not_found';
-        message = data?.message || 'Entity not found.';
-    } else if (response.status === 500) {
-        code = 'internal_error';
-        message = data?.message || 'Internal server error.';
-    } else {
-        // For other status codes, try to map the error using the response body.
-        const rawCode = data?.code;
-        if (typeof rawCode === 'number') {
-            code =
-                errorCodeMapping[rawCode as keyof typeof errorCodeMapping] ||
-                rawCode.toString();
-            message =
-                typeof data?.message === 'string'
-                    ? data.message
-                    : response.statusText || 'Unknown error';
-        } else {
-            code = data?.code
-                ? data.code.toString()
-                : response.status.toString();
-            message = data?.message || response.statusText || 'Unknown error';
-        }
+/**
+ * Processes API response and converts it to a structured AirdropClaimResponse
+ * @param response - The HTTP response from the API
+ * @param data - The parsed JSON data from the response
+ * @returns A structured response object with success/error status and claim data
+ */
+const handleApiResponse = (
+    response: Response,
+    data: any
+): AirdropClaimResponse => {
+    // Successful response with claim data
+    if (response.status === 200) {
+        return {
+            success: true,
+            info: data,
+            claim: data
+        };
+    }
+
+    // All other responses contain UserClaimInfo but are considered errors
+    const errorCode = statusCodeMapping[response.status] || 'unknown_error';
+    let errorMessage = 'Unknown error occurred';
+
+    switch (response.status) {
+        case 425:
+            errorMessage = 'The nearest vesting date has not arrived yet';
+            break;
+        case 409:
+            errorMessage = 'All Jettons have already been claimed';
+            break;
+        case 423:
+            errorMessage = 'Airdrop is locked by admin';
+            break;
+        case 429:
+            errorMessage = 'Blockchain is currently overloaded';
+            break;
+        case 404:
+            errorMessage = 'Airdrop not found or not processed yet';
+            break;
     }
 
     return {
         success: false,
-        error: { code, message },
+        info: data,
+        error: {
+            code: errorCode,
+            message: errorMessage
+        }
     };
 };
 
 /**
- * Function to request an airdrop claim.
- * Processes responses by mapping numeric error codes to string identifiers,
- * ensuring the error.code field is always a string, and handling HTTP errors (400, 404, 500)
- * so that no sensitive network information is exposed.
- *
- * @param airdropId - The Airdrop identifier.
- * @param connectedAddress - The recipient's wallet address.
- * @param testnet - Flag indicating if the request should be made against the testnet (default false).
- * @returns A promise that resolves to an AirdropClaimResponse.
+ * Fetches airdrop claim data for a specific address
+ * Uses v2 API and handles an extended set of response statuses
+ * 
+ * @param airdropId - The unique identifier for the airdrop
+ * @param connectedAddress - The wallet address to check for claims
+ * @param testnet - Whether to use testnet or mainnet API (default: false)
+ * @returns Promise resolving to a structured response with claim data or error
  */
 export const fetchAirdropClaim = (
     airdropId: string,
@@ -130,26 +161,16 @@ export const fetchAirdropClaim = (
     testnet: boolean = false
 ): Promise<AirdropClaimResponse> => {
     const baseUrl = `${testnet ? 'testnet' : 'mainnet'}-airdrop.tonapi.io`;
-    const url = `https://${baseUrl}/v1/airdrop/claim/${connectedAddress}?id=${airdropId}`;
+    const url = `https://${baseUrl}/v2/airdrop/claim/${connectedAddress}?id=${airdropId}`;
 
     return fetch(url)
         .then((response) =>
             response.json().then((data) => ({ response, data }))
         )
         .then(({ response, data }) => {
-            if (!response.ok) {
-                // Process HTTP errors (400, 404, 500, etc.) at this level.
-                return handleHttpError(response, data);
-            }
-
-            // Successful response returns a claim.
-            return {
-                success: true,
-                claim: data as UserClaim,
-            } as AirdropClaimSuccess;
+            return handleApiResponse(response, data);
         })
         .catch(() => ({
-            // Catch-all for network or unexpected errors.
             success: false,
             error: {
                 code: 'network_error',
