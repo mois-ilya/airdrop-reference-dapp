@@ -18,23 +18,23 @@ You can test the application in demo mode by visiting the [demo link](https://to
 
 Before you begin, ensure you have the following tools installed on your computer:
 
-- [Node.js](https://nodejs.org/) (version 16 or higher)
-- [npm](https://www.npmjs.com/)
+-   [Node.js](https://nodejs.org/) (version 16 or higher)
+-   [npm](https://www.npmjs.com/)
 
 ### Installation
 
 1. **Clone the repository:**
 
-   ```bash
-   git clone https://github.com/tonkeeper/airdrop-reference-dapp.git
-   cd airdrop-reference-dapp
-   ```
+    ```bash
+    git clone https://github.com/tonkeeper/airdrop-reference-dapp.git
+    cd airdrop-reference-dapp
+    ```
 
 2. **Install dependencies:**
 
-   ```bash
-   npm install
-   ```
+    ```bash
+    npm install
+    ```
 
 ### Configuration
 
@@ -44,7 +44,7 @@ Create a `.env` file in the root of the project and add the following variables:
 VITE_AIRDROP_UUID=your-claim-uuid
 ```
 
-- `VITE_AIRDROP_UUID`: Unique identifier for the airdrop. Obtain this from your airdrop service.
+-   `VITE_AIRDROP_UUID`: Unique identifier for the airdrop. Obtain this from your airdrop service.
 
 ### Running the Application
 
@@ -72,10 +72,10 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Additional Links
 
-- [TonConsole Airdrop Documentation](https://docs.tonconsole.com/tonconsole/jettons/airdrop)
-- [TonAPI Client](https://github.com/tonkeeper/tonapi-client)
-- [TonConnect UI React](https://github.com/tonkeeper/tonconnect-ui-react)
+-   [TonConsole Airdrop Documentation](https://docs.tonconsole.com/tonconsole/jettons/airdrop)
+-   [TonAPI Client](https://github.com/tonkeeper/tonapi-client)
+-   [TonConnect UI React](https://github.com/tonkeeper/tonconnect-ui-react)
 
 ---
 
-*This project is a reference implementation for the service described in the [TonConsole Airdrop Documentation](https://docs.tonconsole.com/tonconsole/jettons/airdrop).*
+_This project is a reference implementation for the service described in the [TonConsole Airdrop Documentation](https://docs.tonconsole.com/tonconsole/jettons/airdrop)._
